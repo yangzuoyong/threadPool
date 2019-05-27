@@ -1,0 +1,63 @@
+1、为什么要使用线程池？
+
+防止用户无节制创建线程
+通过线程重用节省频繁创建、回收线程的开销
+
+2、Executors提供的四种线程池:newSingleThreadExecutor,newFixedThreadPool,newCachedThreadPool,newScheduledThreadPool，请说出他们的区别以及应用场景
+
+newSingleThreadExecutor: 只有一个线程的线程池，适合用于异步的方式执行单个任务
+newFixedThreadPool: 线程数量固定，任务队列无限长，适用于执行时间较长的任务
+newCachedThreadPool: 线程数量无限，队列长度为0，空闲线程超时回收。适合大量朝生夕死的短期异步任务
+newScheduledThreadPool: 有核心线程数和最大线程数，通过延时队列保存任务。定时执行任务。适合需要定时执行的异步任务
+
+3、线程池有哪几种工作队列？
+
+LinkedBlockingQueue: 底层实现为单向链表，阻塞队列，实现并发读写。线程池中使用无界的LinkedBlockingQueue
+SynchronousQueue: 不存储数据，一个take行为必须阻塞等待另一个线程的put行为，一个put行为必须阻塞等待另一个线程的take行为。take行为有公平（FIFO）和非公平（LIFO）两种模式
+DelayedWorkQueue：内部数据结构为小根堆，按照到期时间排序。每次take时，如果没有到期的任务，会阻塞。如果有，取出到期时间最近的任务。
+
+4、线程池默认的拒绝策略有哪些
+
+AbortPolicy：直接抛出异常，默认策略； 
+CallerRunsPolicy：用调用者所在的线程来执行任务； 
+DiscardOldestPolicy：丢弃阻塞队列中靠最前的任务，并执行当前任务； 
+DiscardPolicy：直接丢弃任务； 
+
+5、如何理解有界队列和无界队列
+
+有界队列：队列长度有限，如带capacity参数的LinkedBlockingQueue, ArrayBlockingQueue。
+	使用有界队列，当队列满了且maximumPoolSize>corePoolSize，会创建新的worker处理任务。
+	有界队列需要同时调整核心线程数、最大线程数、队列长度三个参数。当场景发生变化时，很难适应，比如任务数量剧增。有界队列适合任务生产与消费速度比较稳定的场景。
+无界队列：队列长度不受限，如没有capacity参数的LinkedBlockingQueue。此时，maximumPoolSize参数及拒绝策略没有意义，新任务会被加到阻塞队列中。
+	当任务生产速度远大于消费速度时，无界队列可能导致内存溢出。无界队列适合任务为CPU密集型，且任务生产速度与消费速度相当的场景。
+
+6、线程池是如何实现线程回收的？ 以及核心线程能不能被回收？
+
+线程回收：java.util.concurrent.ThreadPoolExecutor#getTask如果返回null, worker线程会被回收。
+有4种场景:getTask返回null
+worker数量超过maximumPoolSize
+线程池状态为stopped、shutdown、任务队列为空
+worker等待队列中的任务超时，并且超时的worker设置了allowCoreThreadTimeOut或worker数量大于核心线程数
+核心线程可以被回收，只要设置了allowCoreThreadTimeOut(true)
+
+7、FutureTask是什么
+
+FutureTask继承了Runnable及Future接口。Future表示一个任务的生命周期。FutureTask对任务进行了一次包装。
+线程池中的worker实际是执行的FutureTask的run方法，然后FutureTask#run执行Callable#call方法。FutureTask#get获取任务执行结果时，如果任务未完成，会加入等待队列。
+
+8、Thread.sleep(0)的作用是什么
+
+在抢占式CPU调度中，通知CPU释放本线程的执行权，触发操作系统立刻重新进行一次CPU竞争
+
+9、如果提交任务时，线程池队列已满，这时会发生什么
+
+当最大线程数大于核心线程数时，增加worker, 最大线程数等于核心线程数或worker数量大于最大线程数，执行抛弃策略
+
+10、如果一个线程池中还有任务没有执行完成，这个时候是否允许被外部中断？
+
+允许，线程池的关闭方式包括java.util.concurrent.ThreadPoolExecutor#shutdown, java.util.concurrent.ThreadPoolExecutor#shutdownNow。
+其中shutdown允许线程池执行完队列中的任务，不再接受新任务。
+shutdownNow会终止所有任务。
+shutdown会interrupt空闲worker
+shutdownNow会interrupt所有worker
+所以用户线程必须可以通过interrupt方式被终止，线程池shutdown, shutdownNow才会起作用。
